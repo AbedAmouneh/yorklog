@@ -45,5 +45,8 @@ coverage/
 # Vite build artifacts
 *.timestamp-*.mjs
 
+# Turbo
+.turbo
+
 # Internal files
 CLAUDE.md
