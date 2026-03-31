@@ -66,6 +66,7 @@ export const reportsApi = {
   byProject: (params) => api.get('/reports/by-project', { params }),
   whoLoggedToday: () => api.get('/reports/who-logged-today'),
   export: (params) => api.get('/reports/export', { params, responseType: 'blob' }),
+  hoursLog: (params) => api.get('/reports/hours-log', { params }),
 };
 
 // ── Notifications ─────────────────────────────────────────────────────────────
