@@ -7,6 +7,8 @@ import {
   format,
   startOfMonth,
   endOfMonth,
+  startOfWeek,
+  endOfWeek,
   eachDayOfInterval,
   getDay,
   isSameDay,
@@ -595,6 +597,71 @@ function ManagerDashboard() {
           <p className="text-center text-slate-400 text-sm py-6">No data for this month yet.</p>
         )}
       </div>
+
+      <RecentHoursLog />
+    </div>
+  );
+}
+
+function RecentHoursLog() {
+  const now = new Date();
+  const weekStart = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const weekEnd = format(endOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['dash-hours-log', weekStart, weekEnd],
+    queryFn: () => reportsApi.hoursLog({ startDate: weekStart, endDate: weekEnd }).then((r) => r.data),
+  });
+
+  const entries = (data?.entries ?? []).slice(0, 15);
+
+  return (
+    <div className="card overflow-x-auto">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="card-title mb-0">Recent Hours Log</p>
+          <p className="text-xs text-slate-400 mt-0.5">This week — latest {entries.length} entries</p>
+        </div>
+        <Link to="/reports" className="text-xs text-brand-700 font-semibold hover:underline">
+          Hours Log →
+        </Link>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
+      ) : entries.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-6">No entries logged this week yet.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <th className="pb-2 font-semibold">Date</th>
+              <th className="pb-2 font-semibold">Employee</th>
+              <th className="pb-2 font-semibold">Project</th>
+              <th className="pb-2 font-semibold">Task / Work Done</th>
+              <th className="pb-2 font-semibold text-right">Hours</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {entries.map((e) => (
+              <tr key={e.id} className="hover:bg-slate-50">
+                <td className="py-2.5 text-xs text-slate-400 whitespace-nowrap">
+                  {format(new Date(e.date), 'EEE d MMM')}
+                </td>
+                <td className="py-2.5 font-medium text-slate-800 whitespace-nowrap">{e.employee}</td>
+                <td className="py-2.5 text-slate-500 whitespace-nowrap">{e.project}</td>
+                <td className="py-2.5 text-slate-600 max-w-[220px]">
+                  <span className="block truncate" title={e.task ?? e.taskSummary}>
+                    {e.task ?? e.taskSummary}
+                  </span>
+                </td>
+                <td className="py-2.5 text-right font-bold text-navy-900 whitespace-nowrap">
+                  {fmtHours(e.totalMinutes)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
