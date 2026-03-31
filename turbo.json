@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "dev": {
+      "persistent": true,
+      "cache": false
+    },
+    "build": {
+      "outputs": ["dist/**"]
+    },
+    "db:migrate": {
+      "cache": false
+    },
+    "db:generate": {
+      "outputs": [
+        "node_modules/.prisma/**",
+        "node_modules/@prisma/client/**"
+      ],
+      "cache": false
+    },
+    "db:seed": {
+      "cache": false
+    },
+    "db:studio": {
+      "persistent": true,
+      "cache": false
+    }
+  }
+}
