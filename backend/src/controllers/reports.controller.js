@@ -145,6 +145,62 @@ export const whoLoggedToday = async (req, res) => {
   });
 };
 
+export const getHoursLog = async (req, res) => {
+  const { startDate, endDate, userId, projectId } = req.query;
+  const isEmployee = req.user.role === 'employee';
+
+  const where = {};
+
+  if (isEmployee) {
+    // Employees can only see their own entries
+    where.userId = req.user.id;
+  } else {
+    // Dept managers are scoped to their department
+    if (req.user.role === 'dept_manager' && req.user.departmentId) {
+      where.user = { departmentId: req.user.departmentId };
+    }
+    if (userId) where.userId = userId;
+    if (projectId) where.projectId = projectId;
+  }
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) where.date.gte = new Date(startDate);
+    if (endDate) where.date.lte = new Date(endDate);
+  }
+
+  const entries = await prisma.timesheetEntry.findMany({
+    where,
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    include: {
+      user: { select: { id: true, name: true, department: { select: { name: true } } } },
+      project: { select: { id: true, name: true } },
+      taskType: { select: { id: true, name: true } },
+      task: { select: { id: true, title: true } },
+    },
+    take: 1000,
+  });
+
+  const log = entries.map(e => ({
+    id: e.id,
+    date: e.date,
+    employee: e.user.name,
+    employeeId: e.user.id,
+    department: e.user.department?.name,
+    project: e.project.name,
+    projectId: e.project.id,
+    task: e.task?.title ?? e.taskType?.name ?? e.taskSummary,
+    taskSummary: e.taskSummary,
+    description: e.description,
+    totalMinutes: e.totalMinutes,
+    hours: +(e.totalMinutes / 60).toFixed(2),
+    status: e.status,
+  }));
+
+  const totalMinutes = log.reduce((sum, e) => sum + e.totalMinutes, 0);
+  res.json({ entries: log, total: log.length, totalMinutes });
+};
+
 export const exportReport = async (req, res) => {
   const where = buildWhere(req);
   const entries = await prisma.timesheetEntry.findMany({
