@@ -1,5 +1,5 @@
 {
-  "name": "yorklog-backend",
+  "name": "@yorklog/backend",
   "version": "1.0.0",
   "description": "YorkLog — York Press internal work tracking API",
   "type": "module",
