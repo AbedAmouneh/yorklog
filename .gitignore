@@ -3,6 +3,9 @@ node_modules/
 .pnp
 .pnp.js
 
+# npm lockfile (project uses pnpm)
+package-lock.json
+
 # Environment files
 .env
 .env.local
