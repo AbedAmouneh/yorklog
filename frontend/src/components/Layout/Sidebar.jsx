@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin, isManager, isHR, canManageTeams } from '../../lib/auth.jsx';
+import { ROLE_LABELS, APP_NAME, COMPANY_NAME } from '@yorklog/assets';
 import { Avatar, AvatarFallback } from '../ui/avatar.jsx';
 import { Separator } from '../ui/separator.jsx';
 import {
@@ -28,13 +29,6 @@ const NAV = [
   { to: '/admin', label: 'Admin', icon: Settings, guard: (u) => isAdmin(u) },
 ];
 
-const ROLE_LABELS = {
-  employee:     'Employee',
-  dept_manager: 'Team Leader',
-  hr_finance:   'HR / Finance',
-  org_admin:    'Manager',
-  super_admin:  'Super Admin',
-};
 
 export default function Sidebar({ onClose }) {
   const { user, logout } = useAuth();
@@ -57,8 +51,8 @@ export default function Sidebar({ onClose }) {
           <span className="font-slab font-bold text-navy-900 text-sm leading-none">YL</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-slab font-bold text-white text-base leading-tight">YorkLog</p>
-          <p className="text-white/40 text-xs mt-0.5 font-sans">York Press</p>
+          <p className="font-slab font-bold text-white text-base leading-tight">{APP_NAME}</p>
+          <p className="text-white/40 text-xs mt-0.5 font-sans">{COMPANY_NAME}</p>
         </div>
         {onClose && (
           <button

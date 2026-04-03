@@ -1,24 +1,8 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { teamsApi } from '../../lib/api.js';
+import { useTeams, useManagers, useCreateTeam, useSetManager, useMoveMember } from '../../hooks/useTeams.js';
+import { ROLE_LABELS, ROLE_BADGE_COLORS } from '@yorklog/assets';
 import { Users, UserPlus, ArrowRight, X, Edit2, Plus, Search } from 'lucide-react';
-
-const ROLE_LABELS = {
-  employee: 'Employee',
-  dept_manager: 'Team Leader',
-  hr_finance: 'HR / Finance',
-  org_admin: 'Manager',
-  super_admin: 'Super Admin',
-};
-
-const ROLE_BADGE_COLORS = {
-  employee: 'bg-slate-100 text-slate-600',
-  dept_manager: 'bg-brand-50 text-brand-700',
-  hr_finance: 'bg-purple-50 text-purple-700',
-  org_admin: 'bg-amber-50 text-amber-700',
-  super_admin: 'bg-red-50 text-red-700',
-};
 
 function initials(name) {
   return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
@@ -27,17 +11,13 @@ function initials(name) {
 // ── Create Team Modal ─────────────────────────────────────────────────────────
 
 function CreateTeamModal({ allUsers, onClose }) {
-  const qc = useQueryClient();
   const [name, setName] = useState('');
   const [maxDailyHours, setMaxDailyHours] = useState('');
   const [headUserId, setHeadUserId] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [search, setSearch] = useState('');
 
-  const { data: managersData } = useQuery({
-    queryKey: ['managers'],
-    queryFn: () => teamsApi.getManagers().then((r) => r.data),
-  });
+  const { data: managersData } = useManagers();
   const managers = managersData?.managers ?? [];
 
   const filteredUsers = allUsers.filter((u) =>
@@ -52,20 +32,11 @@ function CreateTeamModal({ allUsers, onClose }) {
       return next;
     });
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      teamsApi.create({
-        name: name.trim(),
-        maxDailyHours: maxDailyHours ? Number(maxDailyHours) : undefined,
-        headUserId: headUserId || null,
-        memberIds: [...selectedIds],
-      }),
+  const mutation = useCreateTeam({
     onSuccess: () => {
       toast.success(`Team "${name.trim()}" created!`);
-      qc.invalidateQueries({ queryKey: ['teams'] });
       onClose();
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed to create team.'),
   });
 
   return (
@@ -192,7 +163,12 @@ function CreateTeamModal({ allUsers, onClose }) {
         <div className="flex gap-3 p-5 border-t border-slate-100 shrink-0">
           <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => mutation.mutate({
+              name: name.trim(),
+              maxDailyHours: maxDailyHours ? Number(maxDailyHours) : undefined,
+              headUserId: headUserId || null,
+              memberIds: [...selectedIds],
+            })}
             disabled={!name.trim() || mutation.isPending}
             className="btn-primary flex-1 justify-center"
           >
@@ -209,18 +185,9 @@ function CreateTeamModal({ allUsers, onClose }) {
 // ── Move Member Modal ─────────────────────────────────────────────────────────
 
 function MoveModal({ user, departments, onClose }) {
-  const qc = useQueryClient();
   const [targetDeptId, setTargetDeptId] = useState(user.departmentId ?? '');
 
-  const mutation = useMutation({
-    mutationFn: () => teamsApi.moveMember(user.id, targetDeptId || null),
-    onSuccess: () => {
-      toast.success(`${user.name} moved successfully.`);
-      qc.invalidateQueries({ queryKey: ['teams'] });
-      onClose();
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed to move member.'),
-  });
+  const mutation = useMoveMember({ onSuccess: onClose });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -251,7 +218,7 @@ function MoveModal({ user, departments, onClose }) {
           <div className="flex gap-3">
             <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
             <button
-              onClick={() => mutation.mutate()}
+              onClick={() => mutation.mutate({ userId: user.id, departmentId: targetDeptId || null })}
               disabled={mutation.isPending}
               className="btn-primary flex-1 justify-center"
             >
@@ -267,24 +234,12 @@ function MoveModal({ user, departments, onClose }) {
 // ── Set Manager Modal ─────────────────────────────────────────────────────────
 
 function SetManagerModal({ dept, onClose }) {
-  const qc = useQueryClient();
   const [managerId, setManagerId] = useState(dept.headUserId ?? '');
 
-  const { data } = useQuery({
-    queryKey: ['managers'],
-    queryFn: () => teamsApi.getManagers().then((r) => r.data),
-  });
+  const { data } = useManagers();
   const managers = data?.managers ?? [];
 
-  const mutation = useMutation({
-    mutationFn: () => teamsApi.setManager(dept.id, managerId || null),
-    onSuccess: () => {
-      toast.success('Team leader updated.');
-      qc.invalidateQueries({ queryKey: ['teams'] });
-      onClose();
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed to update team leader.'),
-  });
+  const mutation = useSetManager({ onSuccess: onClose });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -316,7 +271,7 @@ function SetManagerModal({ dept, onClose }) {
           <div className="flex gap-3">
             <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
             <button
-              onClick={() => mutation.mutate()}
+              onClick={() => mutation.mutate({ deptId: dept.id, managerId: managerId || null })}
               disabled={mutation.isPending}
               className="btn-primary flex-1 justify-center"
             >
@@ -416,10 +371,7 @@ export default function Teams() {
   const [showCreate, setShowCreate] = useState(false);
   const [movingUnassigned, setMovingUnassigned] = useState(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['teams'],
-    queryFn: () => teamsApi.getAll().then((r) => r.data),
-  });
+  const { data, isLoading } = useTeams();
 
   const departments = data?.departments ?? [];
   const unassigned = data?.unassigned ?? [];

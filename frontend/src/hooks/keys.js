@@ -1,0 +1,25 @@
+// Centralized query key factory — prevents key drift across hooks and pages.
+
+export const keys = {
+  calendar: (year, month) => ['calendar', year, month],
+  myTasks: (params) => ['my-tasks', params],
+  myTasksAll: (filter) => ['my-tasks-all', filter],
+  myEntries: (dateStr) => ['my-entries', dateStr],
+  myProjects: () => ['my-projects'],
+  projectTasks: (projectId) => ['project-tasks', projectId],
+  projectAssignedTasks: (projectId) => ['project-assigned-tasks', projectId],
+  allProjects: (status) => ['all-projects', status],
+  teamRequests: (status) => ['team-requests', status],
+  reportSummary: (start, end) => ['report-summary', start, end],
+  reportByEmployee: (start, end) => ['report-by-employee', start, end],
+  reportByProject: (start, end) => ['report-by-project', start, end],
+  whoLoggedToday: () => ['who-logged-today'],
+  hoursLog: (start, end, userId, projectId) => ['hours-log', start, end, userId, projectId],
+  hoursLogAll: (start, end) => ['hours-log-all', start, end],
+  dashHoursLog: (start, end) => ['dash-hours-log', start, end],
+  notifications: () => ['notifications'],
+  users: () => ['users'],
+  departments: () => ['departments'],
+  teams: () => ['teams'],
+  managers: () => ['managers'],
+};

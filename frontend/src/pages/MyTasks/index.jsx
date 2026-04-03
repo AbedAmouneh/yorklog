@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksApi, projectsApi } from '../../lib/api.js';
+import { useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
+import { useMyTasksFiltered, useCompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from '../../hooks/useTasks.js';
+import { useMyProjects } from '../../hooks/useProjects.js';
+import { TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@yorklog/assets';
 import { Circle, PlayCircle, CheckSquare, Plus, X, ChevronDown } from 'lucide-react';
 
-const STATUS_META = {
-  todo: { label: 'To Do', icon: Circle, color: 'text-slate-400', bg: 'bg-slate-100 text-slate-600', border: 'border-slate-200' },
-  in_progress: { label: 'In Progress', icon: PlayCircle, color: 'text-blue-500', bg: 'bg-blue-100 text-blue-700', border: 'border-blue-200' },
-  done: { label: 'Done', icon: CheckSquare, color: 'text-green-500', bg: 'bg-green-100 text-green-700', border: 'border-green-100' },
-};
+const STATUS_ICONS = { todo: Circle, in_progress: PlayCircle, done: CheckSquare };
 
 // ── Complete Task Modal ────────────────────────────────────────────────────────
 
@@ -17,11 +15,7 @@ function CompleteModal({ task, onClose, onDone }) {
   const [desc, setDesc] = useState('');
   const [error, setError] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: () => tasksApi.complete(task.id, {
-      hours: parseFloat(hours),
-      description: desc || undefined,
-    }),
+  const mutation = useCompleteTask({
     onSuccess: () => { onDone(); onClose(); },
     onError: (e) => setError(e.response?.data?.error?.fieldErrors?.hours?.[0] || 'Something went wrong.'),
   });
@@ -66,8 +60,13 @@ function CompleteModal({ task, onClose, onDone }) {
 
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="btn btn-secondary flex-1">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={!hours || mutation.isPending}
-            className="btn btn-primary flex-1 disabled:opacity-50">
+          <button disabled={!hours || mutation.isPending}
+            className="btn btn-primary flex-1 disabled:opacity-50"
+            onClick={() => mutation.mutate({
+              id: task.id,
+              hours: parseFloat(hours),
+              description: desc || undefined,
+            })}>
             {mutation.isPending ? 'Saving…' : '✓ Mark Done & Log'}
           </button>
         </div>
@@ -87,26 +86,14 @@ function AddTaskModal({ onClose, onDone }) {
   const [estimatedHours, setEstimatedHours] = useState('');
   const [error, setError] = useState('');
 
-  const { data: projectsData } = useQuery({
-    queryKey: ['my-projects'],
-    queryFn: () => projectsApi.getMyProjects().then((r) => r.data),
-  });
+  const { data: projectsData } = useMyProjects();
   const projects = projectsData?.projects ?? [];
 
   const selectedProject = projects.find((p) => p.id === projectId);
   const taskTypes = selectedProject?.taskTypes ?? [];
 
-  const mutation = useMutation({
-    mutationFn: () => tasksApi.create({
-      title: title.trim(),
-      description: desc.trim() || undefined,
-      projectId,
-      taskTypeId: taskTypeId || undefined,
-      dueDate: dueDate || undefined,
-      estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
-    }),
+  const mutation = useCreateTask({
     onSuccess: () => { onDone(); onClose(); },
-    onError: (e) => setError(e.response?.data?.error?.message || 'Could not create task.'),
   });
 
   return (
@@ -166,7 +153,14 @@ function AddTaskModal({ onClose, onDone }) {
 
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="btn btn-secondary flex-1">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={!title.trim() || !projectId || mutation.isPending}
+          <button onClick={() => mutation.mutate({
+              title: title.trim(),
+              description: desc.trim() || undefined,
+              projectId,
+              taskTypeId: taskTypeId || undefined,
+              dueDate: dueDate || undefined,
+              estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
+            })} disabled={!title.trim() || !projectId || mutation.isPending}
             className="btn btn-primary flex-1 disabled:opacity-50">
             {mutation.isPending ? 'Creating…' : 'Create Task'}
           </button>
@@ -179,7 +173,7 @@ function AddTaskModal({ onClose, onDone }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 const FILTERS = ['all', 'todo', 'in_progress', 'done'];
-const FILTER_LABELS = { all: 'All', todo: 'To Do', in_progress: 'In Progress', done: 'Done' };
+const FILTER_LABELS = { all: 'All', ...TASK_STATUS_LABELS };
 
 export default function MyTasks() {
   const [filter, setFilter] = useState('all');
@@ -187,20 +181,11 @@ export default function MyTasks() {
   const [showAddModal, setShowAddModal] = useState(false);
   const qc = useQueryClient();
 
-  const { data, refetch } = useQuery({
-    queryKey: ['my-tasks-all', filter],
-    queryFn: () => tasksApi.getMyTasks(filter !== 'all' ? { status: filter } : {}).then((r) => r.data),
-  });
+  const { data, refetch } = useMyTasksFiltered(filter);
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => tasksApi.update(id, { status }),
-    onSuccess: () => refetch(),
-  });
+  const statusMutation = useUpdateTask({ onSuccess: () => refetch() });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => tasksApi.delete(id),
-    onSuccess: () => refetch(),
-  });
+  const deleteMutation = useDeleteTask({ onSuccess: () => refetch() });
 
   const tasks = data?.tasks ?? [];
 
@@ -257,13 +242,14 @@ export default function MyTasks() {
       ) : (
         <div className="space-y-3">
           {tasks.map((task) => {
-            const meta = STATUS_META[task.status] ?? STATUS_META.todo;
-            const Icon = meta.icon;
+            const colors = TASK_STATUS_COLORS[task.status] ?? TASK_STATUS_COLORS.todo;
+            const Icon = STATUS_ICONS[task.status] ?? STATUS_ICONS.todo;
+            const statusLabel = TASK_STATUS_LABELS[task.status] ?? TASK_STATUS_LABELS.todo;
             return (
               <div key={task.id} className={`card hover:shadow-md transition-all border ${
                 task.status === 'done' ? 'opacity-60 border-slate-100' : 'border-slate-200'}`}>
                 <div className="flex items-start gap-3">
-                  <Icon size={16} className={`mt-0.5 shrink-0 ${meta.color}`} />
+                  <Icon size={16} className={`mt-0.5 shrink-0 ${colors.color}`} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-semibold ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                       {task.title}
@@ -281,8 +267,8 @@ export default function MyTasks() {
                       <p className="text-xs text-slate-500 mt-1">{task.description}</p>
                     )}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${meta.bg}`}>
-                    {meta.label}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${colors.bg}`}>
+                    {statusLabel}
                   </span>
                 </div>
 

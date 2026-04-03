@@ -1,16 +1,8 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import toast from 'react-hot-toast';
-import { editRequestsApi } from '../../lib/api.js';
+import { useTeamEditRequests, useApproveEditRequest, useRejectEditRequest } from '../../hooks/useEditRequests.js';
+import { fmtHours } from '@yorklog/lib';
 import { CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, Eye } from 'lucide-react';
-
-function fmtHours(mins) {
-  if (mins == null) return '—';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
 
 function DiffRow({ label, before, after, changed }) {
   return (
@@ -23,29 +15,12 @@ function DiffRow({ label, before, after, changed }) {
 }
 
 function RequestCard({ req }) {
-  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
 
-  const approveMutation = useMutation({
-    mutationFn: () => editRequestsApi.approve(req.id),
-    onSuccess: () => {
-      toast.success('Edit request approved!');
-      qc.invalidateQueries({ queryKey: ['team-requests'] });
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed to approve.'),
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: () => editRequestsApi.reject(req.id, rejectReason),
-    onSuccess: () => {
-      toast.success('Edit request rejected.');
-      qc.invalidateQueries({ queryKey: ['team-requests'] });
-      setShowReject(false);
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed to reject.'),
-  });
+  const approveMutation = useApproveEditRequest();
+  const rejectMutation = useRejectEditRequest({ onSuccess: () => setShowReject(false) });
 
   const orig = req.originalData;
   const newD = req.newData;
@@ -144,7 +119,7 @@ function RequestCard({ req }) {
                 className="input flex-1 text-xs py-1.5"
               />
               <button
-                onClick={() => rejectMutation.mutate()}
+                onClick={() => rejectMutation.mutate({ id: req.id, reason: rejectReason })}
                 disabled={!rejectReason || rejectMutation.isPending}
                 className="btn-danger text-xs px-3"
               >
@@ -157,7 +132,7 @@ function RequestCard({ req }) {
           ) : (
             <>
               <button
-                onClick={() => approveMutation.mutate()}
+                onClick={() => approveMutation.mutate(req.id)}
                 disabled={approveMutation.isPending}
                 className="btn bg-green-600 text-white hover:bg-green-700 text-xs gap-1"
               >
@@ -182,12 +157,7 @@ function RequestCard({ req }) {
 export default function Approvals() {
   const [filter, setFilter] = useState('pending');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['team-requests', filter],
-    queryFn: () =>
-      editRequestsApi.getTeamRequests({ status: filter || undefined }).then((r) => r.data),
-    refetchInterval: 30_000,
-  });
+  const { data, isLoading } = useTeamEditRequests(filter);
 
   const requests = data?.requests ?? [];
   const pending = requests.filter((r) => r.status === 'pending').length;

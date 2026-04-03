@@ -20,6 +20,9 @@ importers:
       '@yorklog/contracts':
         specifier: workspace:^
         version: link:../packages/contracts
+      '@yorklog/lib':
+        specifier: workspace:^
+        version: link:../packages/lib
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -99,9 +102,15 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.20.5
         version: 5.96.0(react@18.3.1)
+      '@yorklog/assets':
+        specifier: workspace:^
+        version: link:../packages/assets
       '@yorklog/contracts':
         specifier: workspace:^
         version: link:../packages/contracts
+      '@yorklog/lib':
+        specifier: workspace:^
+        version: link:../packages/lib
       axios:
         specifier: ^1.6.7
         version: 1.14.0
@@ -170,11 +179,27 @@ importers:
         specifier: ^5.1.2
         version: 5.4.21
 
+  packages/assets:
+    dependencies:
+      '@yorklog/contracts':
+        specifier: workspace:^
+        version: link:../contracts
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
   packages/contracts:
     dependencies:
       zod:
         specifier: ^3.22.4
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/lib:
     devDependencies:
       typescript:
         specifier: ^5.3.3

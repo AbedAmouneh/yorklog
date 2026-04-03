@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { projectsApi, timesheetsApi } from '../../lib/api.js';
+import { useMyProjects, useProjectTaskTypes } from '../../hooks/useProjects.js';
+import { useCreateEntry } from '../../hooks/useTimesheets.js';
 import { Zap, Clock } from 'lucide-react';
 
 const schema = z.object({
@@ -31,7 +31,6 @@ const QUICK_DURATIONS = [
 ];
 
 export default function LogHours() {
-  const qc = useQueryClient();
   const [selectedProject, setSelectedProject] = useState('');
 
   const {
@@ -58,24 +57,16 @@ export default function LogHours() {
   const projectId = watch('projectId');
 
   // Projects the current user is assigned to
-  const { data: projectsData, isLoading: loadingProjects } = useQuery({
-    queryKey: ['my-projects'],
-    queryFn: () => projectsApi.getMyProjects().then((r) => r.data),
-  });
+  const { data: projectsData, isLoading: loadingProjects } = useMyProjects();
 
   // Task types for selected project
-  const { data: tasksData } = useQuery({
-    queryKey: ['project-tasks', projectId],
-    queryFn: () => projectsApi.getTasks(projectId).then((r) => r.data),
-    enabled: !!projectId,
-  });
+  const { data: tasksData } = useProjectTaskTypes(projectId);
 
   const projects = projectsData?.projects ?? [];
   const taskTypes = tasksData?.tasks ?? [];
   const quickTasks = taskTypes.filter((t) => t.isQuickAccess);
 
-  const createMutation = useMutation({
-    mutationFn: (data) => timesheetsApi.create(data),
+  const createMutation = useCreateEntry({
     onSuccess: () => {
       toast.success('Hours logged successfully!');
       reset({
@@ -88,11 +79,6 @@ export default function LogHours() {
         description: '',
       });
       setSelectedProject('');
-      qc.invalidateQueries({ queryKey: ['calendar'] });
-      qc.invalidateQueries({ queryKey: ['my-entries'] });
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to log hours.');
     },
   });
 

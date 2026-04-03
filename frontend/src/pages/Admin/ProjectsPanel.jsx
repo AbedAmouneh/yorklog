@@ -1,21 +1,18 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
-import { projectsApi, usersApi, tasksApi } from '../../lib/api.js';
+import { useAllProjects, useCreateProject, useUpdateProject, useAssignEmployees, useProjectTaskTypes, useCreateTaskType, useDeleteTaskType } from '../../hooks/useProjects.js';
+import { useCreateTask, useAllTasks, useDeleteTask } from '../../hooks/useTasks.js';
+import { useUsers } from '../../hooks/useUsers.js';
+import { TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@yorklog/assets';
 import { Plus, X, ChevronDown, ChevronUp, Edit2, Users, Zap, ListTodo, Circle, PlayCircle, CheckSquare } from 'lucide-react';
 
-const TASK_STATUS_META = {
-  todo: { label: 'To Do', icon: Circle, bg: 'bg-slate-100 text-slate-600' },
-  in_progress: { label: 'In Progress', icon: PlayCircle, bg: 'bg-blue-100 text-blue-700' },
-  done: { label: 'Done', icon: CheckSquare, bg: 'bg-green-100 text-green-700' },
-};
+const STATUS_ICONS = { todo: Circle, in_progress: PlayCircle, done: CheckSquare };
 
 function AssignTaskModal({ project, onClose }) {
-  const qc = useQueryClient();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [assignedToId, setAssignedToId] = useState('');
@@ -27,22 +24,11 @@ function AssignTaskModal({ project, onClose }) {
   const members = project.assignments?.map((a) => a.user).filter(Boolean) ?? [];
   const taskTypes = project.taskTypes ?? [];
 
-  const mutation = useMutation({
-    mutationFn: () => tasksApi.create({
-      title: title.trim(),
-      description: desc.trim() || undefined,
-      projectId: project.id,
-      assignedToId: assignedToId || undefined,
-      taskTypeId: taskTypeId || undefined,
-      dueDate: dueDate || undefined,
-      estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
-    }),
+  const mutation = useCreateTask({
     onSuccess: () => {
       toast.success('Task assigned!');
-      qc.invalidateQueries({ queryKey: ['project-assigned-tasks', project.id] });
       onClose();
     },
-    onError: (e) => setError(e.response?.data?.error?.message || 'Could not create task.'),
   });
 
   return (
@@ -100,7 +86,15 @@ function AssignTaskModal({ project, onClose }) {
         </div>
         <div className="flex gap-3 p-5 pt-0">
           <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-          <button onClick={() => mutation.mutate()}
+          <button onClick={() => mutation.mutate({
+              title: title.trim(),
+              description: desc.trim() || undefined,
+              projectId: project.id,
+              assignedToId: assignedToId || undefined,
+              taskTypeId: taskTypeId || undefined,
+              dueDate: dueDate || undefined,
+              estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
+            })}
             disabled={!title.trim() || !assignedToId || mutation.isPending}
             className="btn-primary flex-1 justify-center disabled:opacity-50">
             {mutation.isPending ? 'Assigning…' : 'Assign Task'}
@@ -112,19 +106,11 @@ function AssignTaskModal({ project, onClose }) {
 }
 
 function AssignedTasksSection({ project }) {
-  const qc = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ['project-assigned-tasks', project.id],
-    queryFn: () => tasksApi.getAll({ projectId: project.id }).then((r) => r.data),
-  });
+  const { data } = useAllTasks({ projectId: project.id });
   const tasks = data?.tasks ?? [];
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => tasksApi.delete(id),
-    onSuccess: () => {
-      toast.success('Task removed.');
-      qc.invalidateQueries({ queryKey: ['project-assigned-tasks', project.id] });
-    },
+  const deleteMutation = useDeleteTask({
+    onSuccess: () => {},
   });
 
   if (tasks.length === 0) return (
@@ -134,7 +120,11 @@ function AssignedTasksSection({ project }) {
   return (
     <div className="space-y-2">
       {tasks.map((t) => {
-        const meta = TASK_STATUS_META[t.status] ?? TASK_STATUS_META.todo;
+        const meta = {
+            Icon: STATUS_ICONS[t.status] ?? STATUS_ICONS.todo,
+            label: TASK_STATUS_LABELS[t.status] ?? TASK_STATUS_LABELS.todo,
+            bg: (TASK_STATUS_COLORS[t.status] ?? TASK_STATUS_COLORS.todo).bg,
+          };
         return (
           <div key={t.id} className="flex items-start gap-2 text-sm py-1.5">
             <div className="flex-1 min-w-0">
@@ -171,7 +161,6 @@ const taskSchema = z.object({
 });
 
 function ProjectForm({ onClose, editProject }) {
-  const qc = useQueryClient();
   const isEdit = !!editProject;
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
@@ -179,16 +168,19 @@ function ProjectForm({ onClose, editProject }) {
     defaultValues: editProject ?? {},
   });
 
-  const mutation = useMutation({
-    mutationFn: (data) =>
-      isEdit ? projectsApi.update(editProject.id, data) : projectsApi.create(data),
-    onSuccess: () => {
-      toast.success(isEdit ? 'Project updated!' : 'Project created!');
-      qc.invalidateQueries({ queryKey: ['all-projects'] });
-      onClose();
+  const createMutation = useCreateProject({ onSuccess: onClose });
+  const updateMutation = useUpdateProject({ onSuccess: onClose });
+
+  const mutation = {
+    mutate: (data) => {
+      if (isEdit) {
+        updateMutation.mutate({ id: editProject.id, ...data });
+      } else {
+        createMutation.mutate(data);
+      }
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+    isPending: createMutation.isPending || updateMutation.isPending,
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -224,26 +216,13 @@ function ProjectForm({ onClose, editProject }) {
 }
 
 function AssignModal({ project, onClose }) {
-  const qc = useQueryClient();
-
-  const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll().then((r) => r.data),
-  });
+  const { data: usersData } = useUsers();
 
   const allUsers = usersData?.users?.filter((u) => u.isActive) ?? [];
   const assignedIds = new Set(project.assignments?.map((a) => a.userId) ?? []);
   const [selected, setSelected] = useState(new Set(assignedIds));
 
-  const mutation = useMutation({
-    mutationFn: () => projectsApi.assign(project.id, [...selected]),
-    onSuccess: () => {
-      toast.success('Assignments saved!');
-      qc.invalidateQueries({ queryKey: ['all-projects'] });
-      onClose();
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+  const mutation = useAssignEmployees({ onSuccess: onClose });
 
   const toggle = (id) => {
     setSelected((prev) => {
@@ -278,7 +257,7 @@ function AssignModal({ project, onClose }) {
         </div>
         <div className="flex gap-3 px-5 pb-5">
           <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary flex-1 justify-center">
+          <button onClick={() => mutation.mutate({ projectId: project.id, userIds: [...selected] })} disabled={mutation.isPending} className="btn-primary flex-1 justify-center">
             {mutation.isPending ? 'Saving…' : `Save (${selected.size} selected)`}
           </button>
         </div>
@@ -288,34 +267,17 @@ function AssignModal({ project, onClose }) {
 }
 
 function TasksSection({ project }) {
-  const qc = useQueryClient();
   const [newTaskName, setNewTaskName] = useState('');
   const [isQuick, setIsQuick] = useState(false);
 
-  const { data: tasksData } = useQuery({
-    queryKey: ['project-tasks', project.id],
-    queryFn: () => projectsApi.getTasks(project.id).then((r) => r.data),
+  const { data: tasksData } = useProjectTaskTypes(project.id);
+
+  const createTask = useCreateTaskType({
+    projectId: project.id,
+    onSuccess: () => { setNewTaskName(''); setIsQuick(false); },
   });
 
-  const createTask = useMutation({
-    mutationFn: () => projectsApi.createTask(project.id, { name: newTaskName, isQuickAccess: isQuick }),
-    onSuccess: () => {
-      toast.success('Task added!');
-      setNewTaskName('');
-      setIsQuick(false);
-      qc.invalidateQueries({ queryKey: ['project-tasks', project.id] });
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
-
-  const deleteTask = useMutation({
-    mutationFn: (taskId) => projectsApi.deleteTask(project.id, taskId),
-    onSuccess: () => {
-      toast.success('Task removed.');
-      qc.invalidateQueries({ queryKey: ['project-tasks', project.id] });
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+  const deleteTask = useDeleteTaskType({ projectId: project.id });
 
   const tasks = tasksData?.tasks ?? [];
 
@@ -342,14 +304,14 @@ function TasksSection({ project }) {
           onChange={(e) => setNewTaskName(e.target.value)}
           placeholder="New task type…"
           className="input text-xs py-1.5 flex-1"
-          onKeyDown={(e) => e.key === 'Enter' && newTaskName && createTask.mutate()}
+          onKeyDown={(e) => e.key === 'Enter' && newTaskName && createTask.mutate({ name: newTaskName, isQuickAccess: isQuick })}
         />
         <label className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer">
           <input type="checkbox" checked={isQuick} onChange={(e) => setIsQuick(e.target.checked)} className="accent-brand-700" />
           Quick
         </label>
         <button
-          onClick={() => newTaskName && createTask.mutate()}
+          onClick={() => newTaskName && createTask.mutate({ name: newTaskName, isQuickAccess: isQuick })}
           disabled={!newTaskName || createTask.isPending}
           className="btn-secondary text-xs px-3 py-1.5"
         >
@@ -361,18 +323,13 @@ function TasksSection({ project }) {
 }
 
 function ProjectRow({ project }) {
-  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [expandedTab, setExpandedTab] = useState('tasks'); // 'tasks' | 'types'
   const [showEdit, setShowEdit] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [showAssignTask, setShowAssignTask] = useState(false);
 
-  const archiveMutation = useMutation({
-    mutationFn: () => projectsApi.update(project.id, { status: project.status === 'active' ? 'archived' : 'active' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['all-projects'] }),
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+  const archiveMutation = useUpdateProject();
 
   return (
     <>
@@ -410,7 +367,7 @@ function ProjectRow({ project }) {
               <Edit2 size={14} />
             </button>
             <button
-              onClick={() => archiveMutation.mutate()}
+              onClick={() => archiveMutation.mutate({ id: project.id, status: project.status === 'active' ? 'archived' : 'active' })}
               className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
               title={project.status === 'active' ? 'Archive' : 'Restore'}
             >
@@ -449,11 +406,7 @@ export default function ProjectsPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState('active');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['all-projects', filterStatus],
-    queryFn: () =>
-      projectsApi.getAll({ status: filterStatus || undefined }).then((r) => r.data),
-  });
+  const { data, isLoading } = useAllProjects(filterStatus);
 
   const projects = data?.projects ?? [];
 

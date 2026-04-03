@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth, isManager } from '../../lib/auth.jsx';
-import { reportsApi, timesheetsApi, tasksApi } from '../../lib/api.js';
+import { useCalendar } from '../../hooks/useTimesheets.js';
+import { useMyTasks, useCompleteTask, useUpdateTask } from '../../hooks/useTasks.js';
+import { useReportSummary, useReportByEmployee, useWhoLoggedToday, useDashHoursLog } from '../../hooks/useReports.js';
+import { fmtHours } from '@yorklog/lib';
+import { TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@yorklog/assets';
 import {
   format,
   startOfMonth,
@@ -27,13 +31,6 @@ import {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtHours(mins) {
-  if (!mins && mins !== 0) return '—';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
 function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
   const colors = {
     brand: 'bg-brand-50 text-brand-700',
@@ -57,11 +54,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
 
 // ── Task status helpers ────────────────────────────────────────────────────────
 
-const STATUS_META = {
-  todo: { label: 'To Do', icon: Circle, color: 'text-slate-400', bg: 'bg-slate-100 text-slate-600' },
-  in_progress: { label: 'In Progress', icon: PlayCircle, color: 'text-blue-500', bg: 'bg-blue-100 text-blue-700' },
-  done: { label: 'Done', icon: CheckSquare, color: 'text-green-500', bg: 'bg-green-100 text-green-700' },
-};
+const STATUS_ICONS = { todo: Circle, in_progress: PlayCircle, done: CheckSquare };
 
 // ── Complete Task Modal ────────────────────────────────────────────────────────
 
@@ -70,12 +63,7 @@ function CompleteModal({ task, defaultDate, onClose, onDone }) {
   const [desc, setDesc] = useState('');
   const [error, setError] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: () => tasksApi.complete(task.id, {
-      hours: parseFloat(hours),
-      description: desc || undefined,
-      date: defaultDate,
-    }),
+  const mutation = useCompleteTask({
     onSuccess: () => { onDone(); onClose(); },
     onError: (e) => setError(e.response?.data?.error?.fieldErrors?.hours?.[0] || 'Something went wrong.'),
   });
@@ -143,7 +131,12 @@ function CompleteModal({ task, defaultDate, onClose, onDone }) {
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="btn btn-secondary flex-1">Cancel</button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => mutation.mutate({
+              id: task.id,
+              hours: parseFloat(hours),
+              description: desc || undefined,
+              date: defaultDate,
+            })}
             disabled={!hours || mutation.isPending}
             className="btn btn-primary flex-1 disabled:opacity-50"
           >
@@ -158,8 +151,9 @@ function CompleteModal({ task, defaultDate, onClose, onDone }) {
 // ── Task Card ─────────────────────────────────────────────────────────────────
 
 function TaskCard({ task, onComplete, onStatusChange }) {
-  const meta = STATUS_META[task.status] ?? STATUS_META.todo;
-  const Icon = meta.icon;
+  const colors = TASK_STATUS_COLORS[task.status] ?? TASK_STATUS_COLORS.todo;
+  const Icon = STATUS_ICONS[task.status] ?? STATUS_ICONS.todo;
+  const label = TASK_STATUS_LABELS[task.status] ?? TASK_STATUS_LABELS.todo;
 
   return (
     <div className={`p-4 rounded-xl border transition-all ${
@@ -168,7 +162,7 @@ function TaskCard({ task, onComplete, onStatusChange }) {
         : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-brand-200'
     }`}>
       <div className="flex items-start gap-3">
-        <Icon size={16} className={`mt-0.5 shrink-0 ${meta.color}`} />
+        <Icon size={16} className={`mt-0.5 shrink-0 ${colors.color}`} />
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-semibold ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
             {task.title}
@@ -192,8 +186,8 @@ function TaskCard({ task, onComplete, onStatusChange }) {
             <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>
           )}
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${meta.bg}`}>
-          {meta.label}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${colors.bg}`}>
+          {label}
         </span>
       </div>
 
@@ -318,23 +312,14 @@ function EmployeeDashboard() {
   const month = currentMonth.getMonth() + 1;
 
   // Calendar data (hours logged per day)
-  const { data: cal } = useQuery({
-    queryKey: ['calendar', year, month],
-    queryFn: () => timesheetsApi.getCalendar(year, month).then((r) => r.data),
-  });
+  const { data: cal } = useCalendar(year, month);
 
   // All my tasks
-  const { data: tasksData, refetch: refetchTasks } = useQuery({
-    queryKey: ['my-tasks', year, month],
-    queryFn: () => tasksApi.getMyTasks({ month, year }).then((r) => r.data),
-  });
+  const { data: tasksData, refetch: refetchTasks } = useMyTasks({ month, year });
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => tasksApi.update(id, { status }),
-    onSuccess: () => refetchTasks(),
-  });
+  const statusMutation = useUpdateTask({ onSuccess: () => refetchTasks() });
 
-  const calData = cal?.calendar ?? {};
+  const calData = cal?.calendar ?? cal?.days ?? {};
   const allTasks = tasksData?.tasks ?? [];
 
   // Group tasks by their due date
@@ -504,21 +489,9 @@ function ManagerDashboard() {
   const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
 
-  const { data: summaryData } = useQuery({
-    queryKey: ['report-summary', monthStart, monthEnd],
-    queryFn: () => reportsApi.summary({ startDate: monthStart, endDate: monthEnd }).then((r) => r.data),
-  });
-
-  const { data: byEmpData } = useQuery({
-    queryKey: ['report-by-employee', monthStart, monthEnd],
-    queryFn: () => reportsApi.byEmployee({ startDate: monthStart, endDate: monthEnd }).then((r) => r.data),
-  });
-
-  const { data: whoToday } = useQuery({
-    queryKey: ['who-logged-today'],
-    queryFn: () => reportsApi.whoLoggedToday().then((r) => r.data),
-    refetchInterval: 60_000,
-  });
+  const { data: summaryData } = useReportSummary(monthStart, monthEnd);
+  const { data: byEmpData } = useReportByEmployee(monthStart, monthEnd);
+  const { data: whoToday } = useWhoLoggedToday();
 
   const summary = summaryData?.summary ?? {};
   const employees = byEmpData?.employees ?? [];
@@ -608,10 +581,7 @@ function RecentHoursLog() {
   const weekStart = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const weekEnd = format(endOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['dash-hours-log', weekStart, weekEnd],
-    queryFn: () => reportsApi.hoursLog({ startDate: weekStart, endDate: weekEnd }).then((r) => r.data),
-  });
+  const { data, isLoading } = useDashHoursLog(weekStart, weekEnd);
 
   const entries = (data?.entries ?? []).slice(0, 15);
 

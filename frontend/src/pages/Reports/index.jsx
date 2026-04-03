@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
   format,
   startOfWeek,
@@ -10,6 +9,9 @@ import {
 } from 'date-fns';
 import toast from 'react-hot-toast';
 import { reportsApi } from '../../lib/api.js';
+import { useReportSummary, useReportByEmployee, useReportByProject, useHoursLog, useHoursLogAll } from '../../hooks/useReports.js';
+import { fmtHours } from '@yorklog/lib';
+import { ENTRY_STATUS_BADGE, EXPORT_PREFIX } from '@yorklog/assets';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -18,21 +20,8 @@ import { Download, Clock, Users, BarChart2 } from 'lucide-react';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtHours(mins) {
-  if (!mins) return '0h';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
 const CHART_COLORS = ['#0e7490', '#0284c7', '#7c3aed', '#16a34a', '#d97706', '#dc2626', '#db2777'];
 
-const STATUS_COLORS = {
-  approved: 'badge-green',
-  submitted: 'badge-slate',
-  pending_edit: 'badge-amber',
-  rejected: 'badge-red',
-};
 
 // Bi-weekly pay period anchored to 2025-01-06 (Monday)
 function getPayPeriod(offset = 0) {
@@ -66,22 +55,9 @@ function buildPresets(now) {
 // ── Overview tab ───────────────────────────────────────────────────────────────
 
 function OverviewTab({ startDate, endDate }) {
-  const commonParams = { startDate, endDate };
-
-  const { data: summaryData } = useQuery({
-    queryKey: ['report-summary', startDate, endDate],
-    queryFn: () => reportsApi.summary(commonParams).then((r) => r.data),
-  });
-
-  const { data: byEmpData } = useQuery({
-    queryKey: ['report-by-employee', startDate, endDate],
-    queryFn: () => reportsApi.byEmployee(commonParams).then((r) => r.data),
-  });
-
-  const { data: byProjData } = useQuery({
-    queryKey: ['report-by-project', startDate, endDate],
-    queryFn: () => reportsApi.byProject(commonParams).then((r) => r.data),
-  });
+  const { data: summaryData } = useReportSummary(startDate, endDate);
+  const { data: byEmpData } = useReportByEmployee(startDate, endDate);
+  const { data: byProjData } = useReportByProject(startDate, endDate);
 
   const summary = summaryData?.summary ?? {};
   const employees = byEmpData?.employees ?? [];
@@ -104,7 +80,7 @@ function OverviewTab({ startDate, endDate }) {
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `YorkLog-Report-${startDate}-to-${endDate}.xlsx`;
+      a.download = `${EXPORT_PREFIX}-Report-${startDate}-to-${endDate}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Report exported!');
@@ -238,16 +214,10 @@ function HoursLogTab({ startDate, endDate }) {
     ...(projectFilter ? { projectId: projectFilter } : {}),
   };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['hours-log', startDate, endDate, employeeFilter, projectFilter],
-    queryFn: () => reportsApi.hoursLog(params).then((r) => r.data),
-  });
+  const { data, isLoading } = useHoursLog(params);
 
   // Always fetch unfiltered list to build dropdowns
-  const { data: allData } = useQuery({
-    queryKey: ['hours-log-all', startDate, endDate],
-    queryFn: () => reportsApi.hoursLog({ startDate, endDate }).then((r) => r.data),
-  });
+  const { data: allData } = useHoursLogAll(startDate, endDate);
 
   const entries = data?.entries ?? [];
   const totalMinutes = data?.totalMinutes ?? 0;
@@ -274,7 +244,7 @@ function HoursLogTab({ startDate, endDate }) {
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `YorkLog-Hours-${startDate}-to-${endDate}.xlsx`;
+      a.download = `${EXPORT_PREFIX}-Hours-${startDate}-to-${endDate}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Exported!');
@@ -395,7 +365,7 @@ function HoursLogTab({ startDate, endDate }) {
                     {fmtHours(e.totalMinutes)}
                   </td>
                   <td className="py-2.5">
-                    <span className={`badge ${STATUS_COLORS[e.status] ?? 'badge-slate'}`}>
+                    <span className={`badge ${ENTRY_STATUS_BADGE[e.status] ?? 'badge-slate'}`}>
                       {e.status.replace('_', ' ')}
                     </span>
                   </td>

@@ -1,30 +1,14 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getDaysInMonth } from 'date-fns';
-import toast from 'react-hot-toast';
-import { timesheetsApi, editRequestsApi } from '../../lib/api.js';
+import { useCalendar, useMyEntries, useDeleteEntry } from '../../hooks/useTimesheets.js';
+import { useSubmitEditRequest } from '../../hooks/useEditRequests.js';
+import { fmtHours } from '@yorklog/lib';
+import { ENTRY_STATUS_BADGE } from '@yorklog/assets';
 import { ChevronLeft, ChevronRight, Trash2, Edit2, X } from 'lucide-react';
-
-function fmtHours(mins) {
-  if (!mins) return '0h';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-const STATUS_COLORS = {
-  submitted: 'badge-slate',
-  approved: 'badge-green',
-  pending_edit: 'badge-amber',
-  rejected: 'badge-red',
-};
 
 // Calendar view component
 function CalendarView({ year, month }) {
-  const { data } = useQuery({
-    queryKey: ['calendar', year, month],
-    queryFn: () => timesheetsApi.getCalendar(year, month).then((r) => r.data),
-  });
+  const { data } = useCalendar(year, month);
 
   const cal = data?.calendar ?? {};
   const firstDay = new Date(year, month - 1, 1);
@@ -88,7 +72,6 @@ function CalendarView({ year, month }) {
 
 // Edit request modal
 function EditRequestModal({ entry, onClose }) {
-  const qc = useQueryClient();
   const [formData, setFormData] = useState({
     hours: Math.floor(entry.totalMinutes / 60),
     minutes: entry.totalMinutes % 60,
@@ -97,25 +80,7 @@ function EditRequestModal({ entry, onClose }) {
     reason: '',
   });
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      editRequestsApi.submit(entry.id, {
-        newData: {
-          totalMinutes: formData.hours * 60 + formData.minutes,
-          taskSummary: formData.taskSummary,
-          description: formData.description,
-        },
-        reason: formData.reason,
-      }),
-    onSuccess: () => {
-      toast.success('Edit request submitted!');
-      qc.invalidateQueries({ queryKey: ['my-entries'] });
-      onClose();
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to submit edit request.');
-    },
-  });
+  const mutation = useSubmitEditRequest({ onSuccess: onClose });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -188,7 +153,15 @@ function EditRequestModal({ entry, onClose }) {
             Cancel
           </button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => mutation.mutate({
+              entryId: entry.id,
+              newData: {
+                totalMinutes: formData.hours * 60 + formData.minutes,
+                taskSummary: formData.taskSummary,
+                description: formData.description,
+              },
+              reason: formData.reason,
+            })}
             disabled={!formData.reason || mutation.isPending}
             className="btn-primary flex-1 justify-center"
           >
@@ -201,7 +174,6 @@ function EditRequestModal({ entry, onClose }) {
 }
 
 export default function History() {
-  const qc = useQueryClient();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -212,21 +184,9 @@ export default function History() {
   const lastDay = getDaysInMonth(new Date(year, month - 1));
   const monthEnd = `${dateStr}-${String(lastDay).padStart(2, '0')}`;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-entries', dateStr],
-    queryFn: () =>
-      timesheetsApi.getMyEntries({ startDate: monthStart, endDate: monthEnd, limit: 100 }).then((r) => r.data),
-  });
+  const { data, isLoading } = useMyEntries(dateStr, { startDate: monthStart, endDate: monthEnd, limit: 100 });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => timesheetsApi.delete(id),
-    onSuccess: () => {
-      toast.success('Entry deleted.');
-      qc.invalidateQueries({ queryKey: ['my-entries'] });
-      qc.invalidateQueries({ queryKey: ['calendar'] });
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Could not delete.'),
-  });
+  const deleteMutation = useDeleteEntry();
 
   const prevMonth = () => {
     if (month === 1) { setYear((y) => y - 1); setMonth(12); }
@@ -293,7 +253,7 @@ export default function History() {
                     <span className="text-sm font-bold text-slate-800">{e.project?.name}</span>
                     <span className="text-slate-300">·</span>
                     <span className="text-sm text-slate-500">{e.taskType?.name}</span>
-                    <span className={`badge ${STATUS_COLORS[e.status]}`}>
+                    <span className={`badge ${ENTRY_STATUS_BADGE[e.status]}`}>
                       {e.status.replace('_', ' ')}
                     </span>
                   </div>

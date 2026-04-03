@@ -1,31 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Menu, X, Check, CheckCheck, Plus } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { notificationsApi } from '../../lib/api.js';
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '../../hooks/useNotifications.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback } from '../ui/avatar.jsx';
 import { Button } from '../ui/button.jsx';
 
 function NotificationPanel({ onClose }) {
-  const qc = useQueryClient();
-
-  const { data } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => notificationsApi.getAll().then((r) => r.data),
-    refetchInterval: 30_000,
-  });
-
-  const markRead = useMutation({
-    mutationFn: (id) => notificationsApi.markRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
-  });
-
-  const markAll = useMutation({
-    mutationFn: () => notificationsApi.markAllRead(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
-  });
+  const { data } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const markAll = useMarkAllNotificationsRead();
 
   const notifications = data?.notifications ?? [];
   const unread = data?.unreadCount ?? 0;
@@ -95,12 +80,7 @@ export default function Topbar({ onMenuClick }) {
   const [showNotifs, setShowNotifs] = useState(false);
   const notifRef = useRef(null);
 
-  const { data } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => notificationsApi.getAll().then((r) => r.data),
-    refetchInterval: 30_000,
-  });
-
+  const { data } = useNotifications();
   const unread = data?.unreadCount ?? 0;
 
   useEffect(() => {

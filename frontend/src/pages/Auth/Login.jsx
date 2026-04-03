@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../../lib/auth.jsx';
+import { APP_NAME, COMPANY_NAME, APP_TAGLINE, COPYRIGHT } from '@yorklog/assets';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/button.jsx';
 import { Input } from '../../components/ui/input.jsx';
@@ -50,8 +51,8 @@ export default function Login() {
           <div className="w-16 h-16 rounded-2xl bg-brand-700 flex items-center justify-center mb-4 shadow-xl shadow-brand-700/20">
             <span className="font-slab font-black text-navy-900 text-xl leading-none tracking-tight">YL</span>
           </div>
-          <h1 className="text-2xl font-slab font-bold text-white tracking-tight">YorkLog</h1>
-          <p className="text-white/40 text-sm mt-1 font-sans">York Press · Time Tracking</p>
+          <h1 className="text-2xl font-slab font-bold text-white tracking-tight">{APP_NAME}</h1>
+          <p className="text-white/40 text-sm mt-1 font-sans">{COMPANY_NAME} · {APP_TAGLINE}</p>
         </div>
 
         {/* Card */}
@@ -122,7 +123,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-white/25 text-xs mt-6">
-          © {new Date().getFullYear()} York Press. Internal use only.
+          {COPYRIGHT}
         </p>
       </div>
     </div>

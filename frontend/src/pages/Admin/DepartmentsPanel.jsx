@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import toast from 'react-hot-toast';
-import { departmentsApi } from '../../lib/api.js';
+import { useDepartments, useCreateDepartment, useUpdateDepartment } from '../../hooks/useDepartments.js';
 import { Plus, X, Edit2, Building2 } from 'lucide-react';
 
 const schema = z.object({
@@ -13,7 +11,6 @@ const schema = z.object({
 });
 
 function DeptForm({ onClose, editDept }) {
-  const qc = useQueryClient();
   const isEdit = !!editDept;
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
@@ -21,16 +18,19 @@ function DeptForm({ onClose, editDept }) {
     defaultValues: editDept ?? { maxDailyHours: 8 },
   });
 
-  const mutation = useMutation({
-    mutationFn: (data) =>
-      isEdit ? departmentsApi.update(editDept.id, data) : departmentsApi.create(data),
-    onSuccess: () => {
-      toast.success(isEdit ? 'Department updated!' : 'Department created!');
-      qc.invalidateQueries({ queryKey: ['departments'] });
-      onClose();
+  const createMutation = useCreateDepartment({ onSuccess: onClose });
+  const updateMutation = useUpdateDepartment({ onSuccess: onClose });
+
+  const mutation = {
+    mutate: (data) => {
+      if (isEdit) {
+        updateMutation.mutate({ id: editDept.id, ...data });
+      } else {
+        createMutation.mutate(data);
+      }
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+    isPending: createMutation.isPending || updateMutation.isPending,
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -66,10 +66,7 @@ export default function DepartmentsPanel() {
   const [showForm, setShowForm] = useState(false);
   const [editDept, setEditDept] = useState(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => departmentsApi.getAll().then((r) => r.data),
-  });
+  const { data, isLoading } = useDepartments();
 
   const departments = data?.departments ?? [];
 

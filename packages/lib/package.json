@@ -1,0 +1,20 @@
+{
+  "name": "@yorklog/lib",
+  "version": "1.0.0",
+  "description": "Shared utilities and helpers for backend and frontend",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth.jsx';
+import { APP_NAME } from '@yorklog/assets';
 import Layout from './components/Layout/index.jsx';
 
 // Pages
@@ -24,7 +25,7 @@ const ProtectedRoute = ({ children, roles }) => {
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex h-screen items-center justify-center text-slate-400 text-sm">Loading YorkLog…</div>;
+  if (loading) return <div className="flex h-screen items-center justify-center text-slate-400 text-sm">Loading {APP_NAME}…</div>;
 
   return (
     <Routes>

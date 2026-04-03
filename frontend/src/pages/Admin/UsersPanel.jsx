@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser } from '../../hooks/useUsers.js';
+import { useDepartments } from '../../hooks/useDepartments.js';
+import { ROLE_LABELS } from '@yorklog/assets';
 import toast from 'react-hot-toast';
-import { usersApi, departmentsApi } from '../../lib/api.js';
 import { Plus, X, UserX, Edit2 } from 'lucide-react';
 
 const createSchema = z.object({
@@ -23,16 +24,8 @@ const editSchema = z.object({
   password: z.string().optional(),
 });
 
-const ROLE_LABELS = {
-  employee: 'Employee',
-  dept_manager: 'Team Leader',
-  hr_finance: 'HR / Finance',
-  org_admin: 'Manager',
-  super_admin: 'Super Admin',
-};
 
 function UserForm({ departments, onClose, editUser }) {
-  const qc = useQueryClient();
   const isEdit = !!editUser;
   const schema = isEdit ? editSchema : createSchema;
 
@@ -53,21 +46,21 @@ function UserForm({ departments, onClose, editUser }) {
       : { role: 'employee' },
   });
 
-  const mutation = useMutation({
-    mutationFn: (data) => {
+  const createMutation = useCreateUser({ onSuccess: onClose });
+  const updateMutation = useUpdateUser({ onSuccess: onClose });
+
+  const mutation = {
+    mutate: (data) => {
       const payload = { ...data };
       if (isEdit && !payload.password) delete payload.password;
-      return isEdit
-        ? usersApi.update(editUser.id, payload)
-        : usersApi.create(payload);
+      if (isEdit) {
+        updateMutation.mutate({ id: editUser.id, ...payload });
+      } else {
+        createMutation.mutate(payload);
+      }
     },
-    onSuccess: () => {
-      toast.success(isEdit ? 'User updated!' : 'User created!');
-      qc.invalidateQueries({ queryKey: ['users'] });
-      onClose();
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Operation failed.'),
-  });
+    isPending: createMutation.isPending || updateMutation.isPending,
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -135,29 +128,13 @@ function UserForm({ departments, onClose, editUser }) {
 }
 
 export default function UsersPanel() {
-  const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [search, setSearch] = useState('');
 
-  const { data: usersData, isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll().then((r) => r.data),
-  });
-
-  const { data: deptsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => departmentsApi.getAll().then((r) => r.data),
-  });
-
-  const deactivateMutation = useMutation({
-    mutationFn: (id) => usersApi.deactivate(id),
-    onSuccess: () => {
-      toast.success('User deactivated.');
-      qc.invalidateQueries({ queryKey: ['users'] });
-    },
-    onError: (err) => toast.error(err.response?.data?.error || 'Failed.'),
-  });
+  const { data: usersData, isLoading } = useUsers();
+  const { data: deptsData } = useDepartments();
+  const deactivateMutation = useDeactivateUser();
 
   const users = usersData?.users ?? [];
   const departments = deptsData?.departments ?? [];
