@@ -1,17 +1,8 @@
-import { z } from 'zod';
+import { CreateTimesheetEntryRequest } from '@yorklog/contracts';
 import prisma from '../lib/prisma.js';
 
-const entrySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-  totalMinutes: z.coerce.number().int().min(1).max(1440),
-  projectId: z.string().uuid(),
-  taskTypeId: z.string().uuid(),
-  taskSummary: z.string().min(1).max(255),
-  description: z.string().max(1000).optional(),
-});
-
 export const createEntry = async (req, res) => {
-  const parsed = entrySchema.safeParse(req.body);
+  const parsed = CreateTimesheetEntryRequest.safeParse(req.body);
   if (!parsed.success) {
     const messages = Object.values(parsed.error.flatten().fieldErrors).flat().join(', ')
       || parsed.error.flatten().formErrors.join(', ')

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { CreateProjectRequest, UpdateProjectRequest, CreateTaskTypeRequest } from '@yorklog/contracts';
 import { createNotification } from './notifications.controller.js';
 import prisma from '../lib/prisma.js';
 
@@ -31,11 +31,7 @@ export const getAllProjects = async (req, res) => {
 };
 
 export const createProject = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).max(100),
-    description: z.string().max(500).optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateProjectRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const project = await prisma.project.create({
@@ -45,12 +41,7 @@ export const createProject = async (req, res) => {
 };
 
 export const updateProject = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).max(100).optional(),
-    description: z.string().max(500).optional(),
-    status: z.enum(['active', 'archived']).optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = UpdateProjectRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const project = await prisma.project.update({
@@ -128,11 +119,7 @@ export const getProjectTasks = async (req, res) => {
 };
 
 export const createTask = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(1).max(100),
-    isQuickAccess: z.boolean().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateTaskTypeRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const task = await prisma.taskType.create({

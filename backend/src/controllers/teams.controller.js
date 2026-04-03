@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { CreateTeamRequest } from '@yorklog/contracts';
 import prisma from '../lib/prisma.js';
 
 /**
@@ -6,14 +6,7 @@ import prisma from '../lib/prisma.js';
  * Creates a new team (department) with an optional manager and optional initial members.
  */
 export const createTeam = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).max(100),
-    maxDailyHours: z.coerce.number().min(1).max(24).optional(),
-    headUserId: z.string().uuid().nullable().optional(),
-    memberIds: z.array(z.string().uuid()).optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateTeamRequest.safeParse(req.body);
   if (!parsed.success) {
     const messages = Object.values(parsed.error.flatten().fieldErrors).flat().join(', ');
     return res.status(400).json({ error: messages || 'Invalid input.' });

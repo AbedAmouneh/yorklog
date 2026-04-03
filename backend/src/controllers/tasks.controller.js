@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { CreateTaskRequest, UpdateTaskRequest, CompleteTaskRequest } from '@yorklog/contracts';
 import prisma from '../lib/prisma.js';
 import { createNotification } from './notifications.controller.js';
 
@@ -68,18 +68,7 @@ export const getAllTasks = async (req, res) => {
 // ── POST /tasks  ───────────────────────────────────────────────────────────────
 // Create a task. Managers assign to others; employees create for themselves.
 export const createTask = async (req, res) => {
-  const schema = z.object({
-    title: z.string().min(1).max(200),
-    description: z.string().max(500).optional(),
-    projectId: z.string().uuid(),
-    taskTypeId: z.string().uuid().nullable().optional(),
-    assignedToId: z.string().uuid().optional(), // managers can set this
-    dueDate: z.string().datetime({ offset: true }).nullable().optional()
-      .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()),
-    estimatedHours: z.coerce.number().min(0).max(999).nullable().optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateTaskRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const { assignedToId, dueDate, ...rest } = parsed.data;
@@ -127,16 +116,7 @@ export const createTask = async (req, res) => {
 // ── PATCH /tasks/:id  ──────────────────────────────────────────────────────────
 // Update task metadata (title, description, dueDate, etc.) — NOT for completing
 export const updateTask = async (req, res) => {
-  const schema = z.object({
-    title: z.string().min(1).max(200).optional(),
-    description: z.string().max(500).nullable().optional(),
-    taskTypeId: z.string().uuid().nullable().optional(),
-    dueDate: z.string().nullable().optional(),
-    estimatedHours: z.coerce.number().min(0).max(999).nullable().optional(),
-    status: z.enum(['todo', 'in_progress', 'done']).optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = UpdateTaskRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const task = await prisma.task.findUnique({ where: { id: req.params.id } });
@@ -165,13 +145,7 @@ export const updateTask = async (req, res) => {
 // ── POST /tasks/:id/complete  ──────────────────────────────────────────────────
 // Mark task as done + log the hours in one action
 export const completeTask = async (req, res) => {
-  const schema = z.object({
-    hours: z.coerce.number().min(0.25).max(24),
-    description: z.string().max(500).optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // defaults to today
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = CompleteTaskRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const task = await prisma.task.findUnique({

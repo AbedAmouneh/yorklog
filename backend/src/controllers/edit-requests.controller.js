@@ -1,15 +1,6 @@
-import { z } from 'zod';
+import { CreateEditRequest } from '@yorklog/contracts';
 import { createNotification } from './notifications.controller.js';
 import prisma from '../lib/prisma.js';
-
-const editSchema = z.object({
-  hours: z.number().int().min(0).max(23).optional(),
-  minutes: z.number().int().min(0).max(59).optional(),
-  taskDescription: z.string().max(255).optional(),
-  description: z.string().max(300).optional(),
-  projectId: z.string().uuid().optional(),
-  taskTypeId: z.string().uuid().optional(),
-});
 
 export const submitEditRequest = async (req, res) => {
   const entry = await prisma.timesheetEntry.findUnique({
@@ -23,7 +14,7 @@ export const submitEditRequest = async (req, res) => {
     return res.status(400).json({ error: 'An edit request is already pending for this entry.' });
   }
 
-  const parsed = editSchema.safeParse(req.body);
+  const parsed = CreateEditRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   // Build new data with totalMinutes if hours/minutes changed

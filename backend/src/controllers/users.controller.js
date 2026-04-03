@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { z } from 'zod';
+import { CreateUserRequest, UpdateUserRequest } from '@yorklog/contracts';
 import prisma from '../lib/prisma.js';
 
 export const getAllUsers = async (req, res) => {
@@ -28,14 +28,7 @@ export const getAllUsers = async (req, res) => {
 };
 
 export const createUser = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).max(100),
-    email: z.string().email(),
-    password: z.string().min(8),
-    role: z.enum(['employee', 'dept_manager', 'hr_finance', 'org_admin', 'super_admin']).default('employee'),
-    departmentId: z.string().uuid().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateUserRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const { password, ...rest } = parsed.data;
@@ -52,14 +45,7 @@ export const createUser = async (req, res) => {
 };
 
 export const updateUser = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).optional(),
-    role: z.enum(['employee', 'dept_manager', 'hr_finance', 'org_admin', 'super_admin']).optional(),
-    departmentId: z.string().uuid().nullable().optional(),
-    isActive: z.boolean().optional(),
-    notifyEmail: z.boolean().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = UpdateUserRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const user = await prisma.user.update({

@@ -1,12 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { z } from 'zod';
+import { LoginRequest, UpdateProfileRequest } from '@yorklog/contracts';
 import prisma from '../lib/prisma.js';
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-});
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -16,7 +11,7 @@ const COOKIE_OPTIONS = {
 };
 
 export const login = async (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
+  const parsed = LoginRequest.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid email or password format.' });
   }
@@ -76,13 +71,7 @@ export const getMe = async (req, res) => {
 };
 
 export const updateMe = async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(2).optional(),
-    notifyEmail: z.boolean().optional(),
-    password: z.string().min(8).optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = UpdateProfileRequest.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
